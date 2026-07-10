@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  REDATOR
+  USER
+
+  @@map("role")
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("post_status")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO_EMBED
+  FILE
+
+  @@map("media_type")
+}
+
+enum ReactionType {
+  LIKE
+  DISLIKE
+
+  @@map("reaction_type")
+}
+
+enum NotificationType {
+  POST_LIKE
+  COMMENT_REPLY
+  COMMENT_REACTION
+  NEW_FOLLOWER
+  FOLLOWED_AUTHOR_POST
+
+  @@map("notification_type")
+}
+
+enum EntityType {
+  POST
+  COMMENT
+  PROFILE
+
+  @@map("entity_type")
+}
+
+/// Perfil 1:1 com auth.users (FK + trigger criados em migration SQL manual).
+model Profile {
+  id          String   @id @db.Uuid
+  username    String   @unique
+  displayName String   @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  bio         String?
+  role        Role     @default(USER)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  posts             Post[]
+  comments          Comment[]          @relation("CommentAuthor")
+  mentionedIn       Comment[]          @relation("CommentMention")
+  postLikes         PostLike[]
+  postSaves         PostSave[]
+  commentReactions  CommentReaction[]
+  following         AuthorFollow[]     @relation("Follower")
+  followers         AuthorFollow[]     @relation("Followed")
+  categoryFollows   CategoryFollow[]
+  notifications     Notification[]
+  sessions          UserSession[]
+
+  @@map("profiles")
+}
+
+model Category {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  posts     Post[]
+  followers CategoryFollow[]
+
+  @@map("categories")
+}
+
+model Post {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId       String     @map("author_id") @db.Uuid
+  title          String
+  slug           String     @unique
+  excerpt        String?
+  contentJson    Json       @map("content_json")
+  contentHtml    String     @map("content_html")
+  coverImageUrl  String?    @map("cover_image_url")
+  categoryId     String?    @map("category_id") @db.Uuid
+  status         PostStatus @default(DRAFT)
+  publishedAt    DateTime?  @map("published_at") @db.Timestamptz(6)
+  viewCount      Int        @default(0) @map("view_count")
+  readingTimeMin Int        @default(1) @map("reading_time_min")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  author   Profile    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  media    PostMedia[]
+  likes    PostLike[]
+  saves    PostSave[]
+  comments Comment[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([authorId])
+  @@index([categoryId])
+  @@map("posts")
+}
+
+model PostMedia {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId      String    @map("post_id") @db.Uuid
+  type        MediaType
+  storagePath String?   @map("storage_path")
+  embedUrl    String?   @map("embed_url")
+  altText     String?   @map("alt_text")
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@map("post_media")
+}
+
+model PostLike {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  post Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("post_likes")
+}
+
+model PostSave {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  post Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("post_saves")
+}
+
+model Comment {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId          String    @map("post_id") @db.Uuid
+  authorId        String    @map("author_id") @db.Uuid
+  parentCommentId String?   @map("parent_comment_id") @db.Uuid
+  mentionedUserId String?   @map("mentioned_user_id") @db.Uuid
+  content         String
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author        Profile   @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  mentionedUser Profile?  @relation("CommentMention", fields: [mentionedUserId], references: [id], onDelete: SetNull)
+  parent        Comment?  @relation("CommentThread", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  replies       Comment[] @relation("CommentThread")
+  reactions     CommentReaction[]
+
+  @@index([postId, createdAt])
+  @@map("comments")
+}
+
+model CommentReaction {
+  commentId String       @map("comment_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  type      ReactionType
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@map("comment_reactions")
+}
+
+model AuthorFollow {
+  followerId String   @map("follower_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  follower Profile @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  author   Profile @relation("Followed", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, authorId])
+  @@index([authorId])
+  @@map("author_follows")
+}
+
+model CategoryFollow {
+  followerId String   @map("follower_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  follower Profile  @relation(fields: [followerId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, categoryId])
+  @@index([categoryId])
+  @@map("category_follows")
+}
+
+model Notification {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientId     String           @map("recipient_id") @db.Uuid
+  type            NotificationType
+  entityType      EntityType       @map("entity_type")
+  entityId        String           @map("entity_id") @db.Uuid
+  /// Últimos atores (máx. 3) agregados, mais recente primeiro.
+  actorIds        String[]         @map("actor_ids") @db.Uuid
+  aggregatedCount Int              @default(1) @map("aggregated_count")
+  isRead          Boolean          @default(false) @map("is_read")
+  meta            Json?
+  lastEventAt     DateTime         @default(now()) @map("last_event_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  recipient Profile @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, lastEventAt(sort: Desc)])
+  @@index([recipientId, type, entityType, entityId, isRead])
+  @@map("notifications")
+}
+
+/// Sessões/dispositivos. id = session_id do JWT do Supabase.
+/// revokedAt preenchido = sessão na blacklist (token rejeitado pela API).
+model UserSession {
+  id         String    @id @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  userAgent  String?   @map("user_agent")
+  ip         String?
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}

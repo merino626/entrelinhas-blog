@@ -1,0 +1,97 @@
+@import 'tailwindcss';
+@import 'highlight.js/styles/github-dark.css';
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
+
+  /* Paleta "papel e tinta" com acento terracota */
+  --color-paper: #faf9f7;
+  --color-paper-dark: #14120f;
+  --color-ink: #1c1917;
+  --color-ink-dark: #e7e5e4;
+  --color-accent: #c2410c;
+  --color-accent-soft: #ffedd5;
+  --color-accent-dark: #fb923c;
+}
+
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-paper text-ink antialiased dark:bg-paper-dark dark:text-ink-dark;
+  font-feature-settings: 'liga' 1, 'kern' 1;
+}
+
+::selection {
+  @apply bg-accent-soft text-accent dark:bg-accent/30 dark:text-accent-dark;
+}
+
+/* ── Conteúdo do post ─────────────────────────────────────────────────────── */
+.post-prose {
+  @apply prose prose-stone dark:prose-invert max-w-none
+    prose-headings:font-display prose-headings:tracking-tight
+    prose-a:text-accent dark:prose-a:text-accent-dark prose-a:underline-offset-4
+    prose-img:rounded-xl prose-img:shadow-md
+    prose-blockquote:border-accent dark:prose-blockquote:border-accent-dark
+    prose-blockquote:not-italic
+    prose-code:before:content-none prose-code:after:content-none;
+  font-size: 1.075rem;
+  line-height: 1.8;
+}
+
+.post-prose code:not(pre code) {
+  @apply rounded-md bg-stone-100 px-1.5 py-0.5 text-[0.9em] text-accent dark:bg-stone-800 dark:text-accent-dark;
+}
+
+/* Blocos de código sempre escuros (como um terminal) */
+.post-prose pre {
+  @apply overflow-x-auto rounded-xl border border-stone-800 !bg-[#16181d] p-4 text-sm leading-relaxed shadow-inner;
+}
+.post-prose pre code {
+  @apply bg-transparent p-0 text-stone-200;
+}
+
+.post-prose iframe {
+  @apply aspect-video w-full rounded-xl shadow-md;
+}
+
+/* ── Editor Tiptap ────────────────────────────────────────────────────────── */
+.tiptap {
+  @apply min-h-[420px] outline-none;
+}
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-stone-400;
+}
+.tiptap img.ProseMirror-selectednode {
+  @apply ring-2 ring-accent dark:ring-accent-dark;
+}
+
+/* ── Detalhes ─────────────────────────────────────────────────────────────── */
+.fade-in {
+  animation: fadeIn 0.35s ease both;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(168 162 158 / 0.4) transparent;
+}

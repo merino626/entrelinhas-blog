@@ -1,0 +1,31 @@
+# Segredos — NUNCA commitar
+.env
+.env.*
+!.env.example
+# Configuração local do Claude Code (pode conter credenciais em permissões)
+.claude/
+
+# Dependências
+node_modules/
+
+# Builds
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Prisma
+apps/api/prisma/generated/
+
+# Logs e caches
+*.log
+.turbo/
+.cache/
+coverage/
+
+# SO / IDE
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
