@@ -30,7 +30,7 @@ O banco já está migrado (`prisma migrate deploy` já foi executado). Para re-a
 pnpm --filter @blog/api run seed
 ```
 
-Cria os buckets `post-media`/`avatars`, o usuário **admin@example.com / TroqueEstaSenha123** (troque via `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`/`SEED_ADMIN_USERNAME`) e 3 categorias iniciais.
+Cria os buckets `post-media`/`avatars`, o primeiro usuário admin e 3 categorias iniciais. **Defina `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`/`SEED_ADMIN_USERNAME` no `.env` antes de rodar** — sem isso o script usa um e-mail e senha padrão previsíveis, que não devem ser usados fora de ambiente local descartável.
 
 ### 3. Rodar
 

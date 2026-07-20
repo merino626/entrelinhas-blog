@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { formatDate, timeAgo } from '@/lib/format';
 import { Avatar, Button, EmptyState, Input, Spinner, Textarea } from '@/components/ui';
 import { PostCard } from '@/components/post-card';
+import { AvatarCropModal } from '@/components/avatar-crop-modal';
 
 type Tab = 'dados' | 'curtidos' | 'salvos' | 'seguranca';
 
@@ -21,10 +22,13 @@ const TABS: { id: Tab; label: string }[] = [
 
 function ProfileTab() {
   const { user, updateUser } = useAuth();
+  const router = useRouter();
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -52,12 +56,17 @@ function ProfileTab() {
 
   const uploadAvatar = async (file: File) => {
     setMessage(null);
+    setUploadingAvatar(true);
     try {
       const updated = await api.upload<PublicProfile>('/media/avatar', file);
       updateUser({ ...user, ...updated });
       setMessage('Avatar atualizado!');
+      setPendingAvatar(null);
+      router.refresh();
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Erro no upload do avatar.');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -77,11 +86,21 @@ function ProfileTab() {
             hidden
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void uploadAvatar(file);
+              if (file) setPendingAvatar(file);
+              e.target.value = '';
             }}
           />
         </div>
       </div>
+
+      {pendingAvatar && (
+        <AvatarCropModal
+          file={pendingAvatar}
+          busy={uploadingAvatar}
+          onCancel={() => setPendingAvatar(null)}
+          onConfirm={(cropped) => void uploadAvatar(cropped)}
+        />
+      )}
 
       <div>
         <label htmlFor="displayName" className="mb-1 block text-sm font-medium">

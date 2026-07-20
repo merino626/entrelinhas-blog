@@ -254,7 +254,7 @@ export class PostsService {
   }
 
   async update(postId: string, user: AuthUser, dto: UpdatePostDto) {
-    await this.assertOwnership(postId, user);
+    const existing = await this.assertOwnership(postId, user);
 
     const html = dto.contentHtml !== undefined ? sanitizePostHtml(dto.contentHtml) : undefined;
     await this.prisma.post.update({
@@ -270,6 +270,16 @@ export class PostsService {
       },
     });
     if (html !== undefined) await this.syncMediaFromHtml(postId, html);
+
+    // Capa substituída → limpa a imagem antiga do Storage (best-effort)
+    if (
+      dto.coverImageUrl !== undefined &&
+      dto.coverImageUrl !== existing.coverImageUrl &&
+      existing.coverImageUrl
+    ) {
+      void this.storage.removeFileByPublicUrl(existing.coverImageUrl);
+    }
+
     return this.editable(postId, user);
   }
 
@@ -299,7 +309,7 @@ export class PostsService {
   }
 
   async remove(postId: string, user: AuthUser): Promise<void> {
-    await this.assertOwnership(postId, user);
+    const post = await this.assertOwnership(postId, user);
     const media = await this.prisma.postMedia.findMany({
       where: { postId, storagePath: { not: null } },
       select: { storagePath: true },
@@ -312,6 +322,7 @@ export class PostsService {
       .filter((p) => p.startsWith(`${BUCKET_POST_MEDIA}/`))
       .map((p) => p.slice(BUCKET_POST_MEDIA.length + 1));
     void this.storage.removeFiles(BUCKET_POST_MEDIA, paths);
+    void this.storage.removeFileByPublicUrl(post.coverImageUrl);
   }
 
   /**
@@ -319,6 +330,11 @@ export class PostsService {
    * Storage e embeds de vídeo presentes no HTML sanitizado.
    */
   private async syncMediaFromHtml(postId: string, html: string): Promise<void> {
+    const previous = await this.prisma.postMedia.findMany({
+      where: { postId, storagePath: { not: null } },
+      select: { storagePath: true },
+    });
+
     const media: { type: MediaType; storagePath?: string; embedUrl?: string; position: number }[] =
       [];
     let position = 0;
@@ -343,6 +359,14 @@ export class PostsService {
         ? [this.prisma.postMedia.createMany({ data: media.map((m) => ({ ...m, postId })) })]
         : []),
     ]);
+
+    // Imagens removidas do conteúdo → limpa os arquivos órfãos do Storage (best-effort)
+    const keptPaths = new Set(media.map((m) => m.storagePath).filter(Boolean));
+    const orphanedPaths = previous
+      .map((m) => m.storagePath!)
+      .filter((p) => !keptPaths.has(p) && p.startsWith(`${BUCKET_POST_MEDIA}/`))
+      .map((p) => p.slice(BUCKET_POST_MEDIA.length + 1));
+    void this.storage.removeFiles(BUCKET_POST_MEDIA, orphanedPaths);
   }
 
   /** Notifica seguidores do autor e das categorias na primeira publicação. */

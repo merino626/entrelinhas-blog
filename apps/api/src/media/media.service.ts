@@ -52,6 +52,11 @@ export class MediaService {
 
   /** Avatar do usuário → bucket avatars + atualiza o perfil. */
   async uploadAvatar(user: AuthUser, file: Express.Multer.File) {
+    const previous = await this.prisma.profile.findUnique({
+      where: { id: user.id },
+      select: { avatarUrl: true },
+    });
+
     const processed = await this.reencode(file.buffer, { maxWidth: 256, square: true });
     const path = `${user.id}/${randomUUID()}.webp`;
     const { publicUrl } = await this.storage.uploadPublicFile(
@@ -65,6 +70,10 @@ export class MediaService {
       data: { avatarUrl: publicUrl },
       select: { id: true, username: true, displayName: true, avatarUrl: true, bio: true, role: true },
     });
+
+    // Limpa o avatar anterior do Storage (best-effort)
+    void this.storage.removeFileByPublicUrl(previous?.avatarUrl);
+
     return profile;
   }
 }

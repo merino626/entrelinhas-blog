@@ -13,6 +13,7 @@ export const BUCKET_AVATARS = 'avatars';
 export class SupabaseAdminService {
   private readonly logger = new Logger(SupabaseAdminService.name);
   readonly client: SupabaseClient;
+  private readonly publicUrlPrefix: string;
 
   constructor(config: ConfigService) {
     const url = config.get<string>('SUPABASE_URL') ?? 'https://placeholder.supabase.co';
@@ -25,6 +26,7 @@ export class SupabaseAdminService {
     this.client = createClient(url, serviceKey || 'missing-service-role-key', {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+    this.publicUrlPrefix = `${url}/storage/v1/object/public/`;
   }
 
   async uploadPublicFile(
@@ -51,5 +53,20 @@ export class SupabaseAdminService {
     if (paths.length === 0) return;
     const { error } = await this.client.storage.from(bucket).remove(paths);
     if (error) this.logger.warn(`Falha ao remover arquivos de ${bucket}: ${error.message}`);
+  }
+
+  /**
+   * Remove o arquivo apontado por uma URL pública do Storage (best-effort).
+   * Usado para limpar mídia antiga (avatar, capa de post) ao ser substituída/excluída.
+   * Ignora silenciosamente URLs vazias ou que não pertençam a este projeto Supabase.
+   */
+  async removeFileByPublicUrl(url: string | null | undefined): Promise<void> {
+    if (!url || !url.startsWith(this.publicUrlPrefix)) return;
+    const key = decodeURIComponent(url.slice(this.publicUrlPrefix.length));
+    const slashIdx = key.indexOf('/');
+    if (slashIdx === -1) return;
+    const bucket = key.slice(0, slashIdx);
+    const path = key.slice(slashIdx + 1);
+    await this.removeFiles(bucket, [path]);
   }
 }
