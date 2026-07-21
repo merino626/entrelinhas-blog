@@ -1,12 +1,27 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PostStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GoTrueService } from '../supabase/gotrue.service';
+import {
+  SupabaseAdminService,
+  BUCKET_POST_MEDIA,
+} from '../supabase/supabase-admin.service';
 import { paginate, skipTake } from '../common/utils/pagination';
 import type { AuthUser } from '../common/types';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gotrue: GoTrueService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+  ) {}
 
   private async withCounts(profileId: string) {
     const [followers, following, posts] = await this.prisma.$transaction([
@@ -73,6 +88,63 @@ export class UsersService {
       ...counts,
       isFollowedByMe,
     };
+  }
+
+  /**
+   * Exclui a própria conta (LGPD). Reverifica a senha, remove o usuário no
+   * GoTrue (cascade no banco: profile → posts → media → comentários → …) e
+   * limpa os arquivos do Storage, que o cascade do banco não alcança.
+   */
+  async deleteMe(user: AuthUser, password: string): Promise<void> {
+    // Anti-lockout: o último admin não pode se excluir sozinho.
+    if (user.profile.role === Role.ADMIN) {
+      const admins = await this.prisma.profile.count({ where: { role: Role.ADMIN } });
+      if (admins <= 1) {
+        throw new BadRequestException(
+          'Você é o único administrador. Promova outro antes de excluir a conta.',
+        );
+      }
+    }
+
+    // Reverifica a senha (protege contra exclusão por sessão sequestrada).
+    if (!user.email) {
+      throw new BadRequestException('Não foi possível verificar sua identidade.');
+    }
+    let accessToken: string;
+    try {
+      const session = await this.gotrue.signInWithPassword(user.email, password);
+      accessToken = session.access_token;
+    } catch {
+      throw new UnauthorizedException('Senha incorreta.');
+    }
+    void this.gotrue.signOut(accessToken, 'local');
+
+    // Coleta os arquivos do Storage ANTES de apagar.
+    const [media, posts] = await this.prisma.$transaction([
+      this.prisma.postMedia.findMany({
+        where: { post: { authorId: user.id }, storagePath: { not: null } },
+        select: { storagePath: true },
+      }),
+      this.prisma.post.findMany({
+        where: { authorId: user.id, coverImageUrl: { not: null } },
+        select: { coverImageUrl: true },
+      }),
+    ]);
+
+    // Apaga o usuário no GoTrue → cascade limpa profile/posts/media/etc no banco.
+    const { error } = await this.supabaseAdmin.client.auth.admin.deleteUser(user.id);
+    if (error) {
+      throw new InternalServerErrorException('Falha ao excluir a conta.');
+    }
+
+    // Limpa o Storage (best-effort).
+    const mediaPaths = media
+      .map((m) => m.storagePath!)
+      .filter((p) => p.startsWith(`${BUCKET_POST_MEDIA}/`))
+      .map((p) => p.slice(BUCKET_POST_MEDIA.length + 1));
+    void this.supabaseAdmin.removeFiles(BUCKET_POST_MEDIA, mediaPaths);
+    for (const p of posts) void this.supabaseAdmin.removeFileByPublicUrl(p.coverImageUrl);
+    void this.supabaseAdmin.removeFileByPublicUrl(user.profile.avatarUrl);
   }
 
   // ── Administração ──────────────────────────────────────────────────────────

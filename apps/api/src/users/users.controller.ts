@@ -1,12 +1,15 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { Role } from '@prisma/client';
@@ -36,6 +39,12 @@ class UpdateRoleDto {
   role: Role;
 }
 
+class DeleteMeDto {
+  @IsString()
+  @MaxLength(128)
+  password: string;
+}
+
 class UsersQueryDto extends PageQueryDto {
   @IsOptional()
   @IsString()
@@ -63,6 +72,14 @@ export class UsersController {
   @Patch('me')
   updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.users.updateMe(user, dto);
+  }
+
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
+  @HttpCode(204)
+  @Delete('me')
+  deleteMe(@CurrentUser() user: AuthUser, @Body() dto: DeleteMeDto) {
+    return this.users.deleteMe(user, dto.password);
   }
 
   @ApiBearerAuth()

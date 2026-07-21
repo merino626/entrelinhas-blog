@@ -10,6 +10,7 @@ import { formatDate, timeAgo } from '@/lib/format';
 import { Avatar, Button, EmptyState, Input, Spinner, Textarea } from '@/components/ui';
 import { PostCard } from '@/components/post-card';
 import { AvatarCropModal } from '@/components/avatar-crop-modal';
+import { DeleteAccountModal } from '@/components/delete-account-modal';
 
 type Tab = 'dados' | 'curtidos' | 'salvos' | 'seguranca';
 
@@ -169,9 +170,10 @@ function PostListTab({ endpoint, emptyTitle }: { endpoint: string; emptyTitle: s
 }
 
 function SecurityTab() {
-  const { logoutAll } = useAuth();
+  const { logoutAll, logout } = useAuth();
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionView[] | null>(null);
+  const [showDelete, setShowDelete] = useState(false);
 
   const load = () =>
     api
@@ -249,6 +251,27 @@ function SecurityTab() {
           Encerrar todas as sessões
         </Button>
       </div>
+
+      <div className="rounded-2xl border border-red-200 bg-red-50/50 p-5 dark:border-red-900/50 dark:bg-red-950/20">
+        <h4 className="font-medium text-red-700 dark:text-red-400">Excluir minha conta</h4>
+        <p className="mt-1 text-sm text-stone-500">
+          Remove permanentemente sua conta e todo o conteúdo associado (posts, comentários,
+          curtidas e imagens). Não há como desfazer.
+        </p>
+        <Button variant="danger" size="sm" className="mt-3" onClick={() => setShowDelete(true)}>
+          Excluir conta
+        </Button>
+      </div>
+
+      {showDelete && (
+        <DeleteAccountModal
+          onClose={() => setShowDelete(false)}
+          onDeleted={async () => {
+            await logout();
+            router.replace('/');
+          }}
+        />
+      )}
     </div>
   );
 }
