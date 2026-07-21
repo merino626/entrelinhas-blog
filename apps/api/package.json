@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "seed:content": "tsx scripts/seed-content.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
