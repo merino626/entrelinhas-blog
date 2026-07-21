@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import hljs from 'highlight.js/lib/common';
 import { TableOfContents, type TocItem } from './table-of-contents';
 
@@ -16,38 +16,43 @@ function slugify(text: string): string {
 }
 
 /**
+ * Injeta id nos headings h2/h3 DIRETAMENTE na string HTML e monta o sumário.
+ * É feito com string pura (sem DOM) para funcionar no SSR e — o ponto crucial —
+ * para os ids fazerem parte do HTML renderizado, sobrevivendo a re-renders.
+ * (Setar id imperativamente após o render não funciona: o React reescreve o
+ * innerHTML a partir da string e apaga os ids.)
+ */
+function addHeadingIds(html: string): { html: string; toc: TocItem[] } {
+  const used = new Set<string>();
+  const toc: TocItem[] = [];
+  const withIds = html.replace(/<(h[23])>([\s\S]*?)<\/\1>/g, (match, tag: string, inner: string) => {
+    const text = inner.replace(/<[^>]+>/g, '').trim();
+    if (!text) return match;
+    const base = slugify(text) || 'secao';
+    let id = base;
+    let n = 2;
+    while (used.has(id)) id = `${base}-${n++}`;
+    used.add(id);
+    toc.push({ id, text, level: tag === 'h3' ? 3 : 2 });
+    return `<${tag} id="${id}">${inner}</${tag}>`;
+  });
+  return { html: withIds, toc };
+}
+
+/**
  * Renderiza o HTML do post (JÁ SANITIZADO pela API com allow-list) e aplica
  * syntax highlight nos blocos de código + barra de progresso + sumário (TOC).
- * Os ids de heading são gerados no cliente (o sanitizador não os preserva).
  */
 export function PostContent({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
-  const [toc, setToc] = useState<TocItem[]>([]);
+  const { html: htmlWithIds, toc } = useMemo(() => addHeadingIds(html), [html]);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.querySelectorAll('pre code').forEach((block) => {
+    ref.current?.querySelectorAll('pre code').forEach((block) => {
       hljs.highlightElement(block as HTMLElement);
     });
-
-    // Gera ids únicos nos headings e monta o sumário.
-    const used = new Set<string>();
-    const items: TocItem[] = [];
-    el.querySelectorAll('h2, h3').forEach((node) => {
-      const heading = node as HTMLElement;
-      const text = heading.textContent?.trim() ?? '';
-      if (!text) return;
-      let id = slugify(text) || 'secao';
-      let n = 2;
-      while (used.has(id)) id = `${slugify(text)}-${n++}`;
-      used.add(id);
-      heading.id = id;
-      items.push({ id, text, level: heading.tagName === 'H3' ? 3 : 2 });
-    });
-    setToc(items);
-  }, [html]);
+  }, [htmlWithIds]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -72,7 +77,7 @@ export function PostContent({ html }: { html: string }) {
       />
       <TableOfContents items={toc} />
       {/* Conteúdo sanitizado no servidor (sanitize-html allow-list) */}
-      <div ref={ref} className="post-prose" dangerouslySetInnerHTML={{ __html: html }} />
+      <div ref={ref} className="post-prose" dangerouslySetInnerHTML={{ __html: htmlWithIds }} />
     </>
   );
 }
