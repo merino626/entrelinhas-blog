@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx scripts/seed.ts",
-    "seed:content": "tsx scripts/seed-content.ts"
+    "seed:content": "tsx scripts/seed-content.ts",
+    "seed:covers": "tsx scripts/seed-covers.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

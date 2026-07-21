@@ -47,6 +47,11 @@ body {
   line-height: 1.8;
 }
 
+/* Âncoras de heading (sumário / links diretos) não ficam sob a navbar fixa */
+.post-prose :is(h2, h3) {
+  scroll-margin-top: 5.5rem;
+}
+
 .post-prose code:not(pre code) {
   @apply rounded-md bg-stone-100 px-1.5 py-0.5 text-[0.9em] text-accent dark:bg-stone-800 dark:text-accent-dark;
 }

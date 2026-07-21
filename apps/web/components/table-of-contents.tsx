@@ -46,7 +46,12 @@ export function TableOfContents({ items }: { items: TocItem[] }) {
               href={`#${item.id}`}
               onClick={(e) => {
                 e.preventDefault();
-                document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' });
+                const el = document.getElementById(item.id);
+                if (!el) return;
+                // Scroll manual com offset para o heading não ficar sob a navbar fixa.
+                const y = el.getBoundingClientRect().top + window.scrollY - 88;
+                window.scrollTo({ top: y, behavior: 'smooth' });
+                history.replaceState(null, '', `#${item.id}`);
               }}
               className={`-ml-px block border-l-2 pl-3 text-sm leading-snug transition-colors ${
                 active === item.id
