@@ -120,3 +120,8 @@ Because the two services reference each other's URLs, the practical order is: de
 ## Roadmap (out of current scope)
 
 Paid products/courses, direct video upload, Turnstile/captcha on registration, data export (LGPD/GDPR), dedicated comment moderation in the admin panel.
+
+## Live
+
+- Web: https://entrelinhas-blog-web.vercel.app
+- API: https://entrelinhas-blog-2wd3.onrender.com/api/v1 (Swagger docs at `/api/docs`)
