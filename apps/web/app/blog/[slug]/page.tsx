@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { PostDetail } from '@blog/shared';
+import type { Paginated, PostDetail, PostSummary } from '@blog/shared';
 import { apiGet } from '@/lib/api-server';
 import { formatDate } from '@/lib/format';
 import { Avatar } from '@/components/ui';
@@ -10,6 +10,7 @@ import { PostContent } from '@/components/post-content';
 import { PostActions } from '@/components/post-actions';
 import { FollowButton } from '@/components/follow-button';
 import { CommentSection } from '@/components/comment-section';
+import { RelatedPosts } from '@/components/related-posts';
 
 export const revalidate = 60;
 
@@ -36,10 +37,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+async function fetchRelated(post: PostDetail): Promise<PostSummary[]> {
+  const filter = post.category
+    ? `category=${post.category.slug}`
+    : `author=${post.author.username}`;
+  const page = await apiGet<Paginated<PostSummary>>(`/posts?${filter}&pageSize=4`);
+  return (page?.items ?? []).filter((p) => p.id !== post.id).slice(0, 3);
+}
+
 export default async function PostPage({ params }: Props) {
   const { slug } = await params;
   const post = await apiGet<PostDetail>(`/posts/slug/${slug}`);
   if (!post) notFound();
+
+  const related = await fetchRelated(post);
 
   return (
     <article className="mx-auto max-w-3xl">
@@ -108,6 +119,8 @@ export default async function PostPage({ params }: Props) {
       <div className="mt-10">
         <PostContent html={post.contentHtml} />
       </div>
+
+      <RelatedPosts posts={related} />
 
       <CommentSection postId={post.id} />
     </article>

@@ -13,13 +13,15 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const [posts, categories] = await Promise.all([
+  const [posts, categories, trending] = await Promise.all([
     apiGet<Paginated<PostSummary>>('/posts?pageSize=13'),
     apiGet<CategorySummary[]>('/categories', 300),
+    apiGet<Paginated<PostSummary>>('/posts?sort=trending&pageSize=4'),
   ]);
 
   const items = posts?.items ?? [];
   const [featured, ...rest] = items;
+  const trendingItems = trending?.items ?? [];
 
   return (
     <div className="space-y-12">
@@ -43,6 +45,20 @@ export default async function HomePage() {
       </section>
 
       <FeedSection />
+
+      {trendingItems.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <h2 className="font-display text-2xl font-semibold">Em alta</h2>
+            <span aria-hidden>🔥</span>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {trendingItems.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-6">
         <h2 className="font-display text-2xl font-semibold">Últimas publicações</h2>

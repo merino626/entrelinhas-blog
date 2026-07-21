@@ -13,6 +13,7 @@ import { CommentsModule } from './comments/comments.module';
 import { FollowsModule } from './follows/follows.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
+import { RevalidateModule } from './revalidate/revalidate.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -32,6 +33,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     FollowsModule,
     NotificationsModule,
     HealthModule,
+    RevalidateModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

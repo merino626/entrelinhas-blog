@@ -8,6 +8,7 @@ import { MediaType, PostStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupabaseAdminService, BUCKET_POST_MEDIA } from '../supabase/supabase-admin.service';
+import { RevalidateService } from '../revalidate/revalidate.service';
 import { sanitizePostHtml, readingTimeMin, stripHtml } from '../common/utils/sanitize';
 import { slugify, randomSuffix } from '../common/utils/slugify';
 import { paginate, skipTake } from '../common/utils/pagination';
@@ -39,9 +40,44 @@ export class PostsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly storage: SupabaseAdminService,
+    private readonly revalidate: RevalidateService,
     config: ConfigService,
   ) {
     this.storagePublicPrefix = `${config.get<string>('SUPABASE_URL')}/storage/v1/object/public/`;
+  }
+
+  // ── Invalidação de cache (ISR) ───────────────────────────────────────────────
+
+  private buildPostPaths(
+    slug: string,
+    authorUsername: string,
+    categorySlug?: string | null,
+  ): string[] {
+    return [
+      '/',
+      '/feed.xml',
+      '/sitemap.xml',
+      `/blog/${slug}`,
+      `/autor/${authorUsername}`,
+      ...(categorySlug ? [`/categoria/${categorySlug}`] : []),
+    ];
+  }
+
+  /** Busca slug/autor/categoria do post e dispara revalidação best-effort. */
+  private async revalidateForPost(postId: string): Promise<void> {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        slug: true,
+        author: { select: { username: true } },
+        category: { select: { slug: true } },
+      },
+    });
+    if (post) {
+      this.revalidate.trigger(
+        this.buildPostPaths(post.slug, post.author.username, post.category?.slug),
+      );
+    }
   }
 
   // ── Mapeamento ─────────────────────────────────────────────────────────────
@@ -114,6 +150,11 @@ export class PostsService {
   // ── Listagens públicas ─────────────────────────────────────────────────────
 
   list(query: PostsQueryDto, viewer?: AuthUser) {
+    // Busca full-text (≥ 2 chars) usa índice tsvector; caso contrário, listagem normal.
+    if (query.q && query.q.trim().length >= 2) {
+      return this.searchPage(query, viewer);
+    }
+
     const where: Prisma.PostWhereInput = {
       status: PostStatus.PUBLISHED,
       ...(query.category ? { category: { slug: query.category } } : {}),
@@ -127,11 +168,56 @@ export class PostsService {
           }
         : {}),
     };
+
+    // "Em alta": mais vistos entre os publicados nos últimos 30 dias.
+    if (query.sort === 'trending') {
+      where.publishedAt = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+    }
+
     const orderBy: Prisma.PostOrderByWithRelationInput[] =
-      query.sort === 'popular'
+      query.sort === 'popular' || query.sort === 'trending'
         ? [{ viewCount: 'desc' }, { publishedAt: 'desc' }]
         : [{ publishedAt: 'desc' }];
     return this.listWith(where, orderBy, query.page, query.pageSize, viewer);
+  }
+
+  /**
+   * Busca full-text ranqueada (ts_rank) sobre a coluna gerada search_vector.
+   * Retorna ids ordenados por relevância, hidrata com summaryInclude e
+   * preserva a ordem do ranking.
+   */
+  private async searchPage(query: PostsQueryDto, viewer?: AuthUser) {
+    const q = query.q!.trim();
+    const { page, pageSize } = query;
+    const { skip, take } = skipTake(page, pageSize);
+
+    const rows = await this.prisma.$queryRaw<{ id: string; total: bigint }[]>`
+      SELECT p.id, count(*) OVER() AS total
+      FROM posts p
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN profiles a ON a.id = p.author_id
+      WHERE p.status = 'PUBLISHED'
+        AND p.search_vector @@ websearch_to_tsquery('portuguese', ${q})
+        ${query.category ? Prisma.sql`AND c.slug = ${query.category}` : Prisma.empty}
+        ${query.author ? Prisma.sql`AND a.username = ${query.author}` : Prisma.empty}
+      ORDER BY ts_rank(p.search_vector, websearch_to_tsquery('portuguese', ${q})) DESC,
+               p.published_at DESC
+      LIMIT ${take} OFFSET ${skip}
+    `;
+
+    if (rows.length === 0) return paginate([], 0, page, pageSize);
+
+    const total = Number(rows[0].total);
+    const ids = rows.map((r) => r.id);
+    const posts = await this.prisma.post.findMany({
+      where: { id: { in: ids } },
+      include: summaryInclude,
+    });
+    const byId = new Map(posts.map((p) => [p.id, p]));
+    const ordered = ids.map((id) => byId.get(id)).filter((p): p is PostWithSummary => !!p);
+
+    const ctx = await this.interactionContext(viewer?.id, ids);
+    return paginate(ordered.map((r) => this.toSummary(r, ctx)), total, page, pageSize);
   }
 
   /** Feed "para você": posts de autores e categorias que o usuário segue. */
@@ -249,7 +335,10 @@ export class PostsService {
     });
 
     await this.syncMediaFromHtml(post.id, html);
-    if (publish) await this.notifyFollowers(post.id);
+    if (publish) {
+      await this.notifyFollowers(post.id);
+      void this.revalidateForPost(post.id);
+    }
     return this.editable(post.id, user);
   }
 
@@ -280,6 +369,11 @@ export class PostsService {
       void this.storage.removeFileByPublicUrl(existing.coverImageUrl);
     }
 
+    // Post já publicado teve conteúdo alterado → invalida o cache público.
+    if (existing.status === PostStatus.PUBLISHED) {
+      void this.revalidateForPost(postId);
+    }
+
     return this.editable(postId, user);
   }
 
@@ -296,6 +390,7 @@ export class PostsService {
       },
     });
     if (firstPublish) await this.notifyFollowers(postId);
+    void this.revalidateForPost(postId);
     return this.editable(postId, user);
   }
 
@@ -305,15 +400,28 @@ export class PostsService {
       where: { id: postId },
       data: { status: PostStatus.DRAFT },
     });
+    // Saiu do ar → revalida para some das listagens públicas.
+    void this.revalidateForPost(postId);
     return this.editable(postId, user);
   }
 
   async remove(postId: string, user: AuthUser): Promise<void> {
     const post = await this.assertOwnership(postId, user);
-    const media = await this.prisma.postMedia.findMany({
-      where: { postId, storagePath: { not: null } },
-      select: { storagePath: true },
-    });
+    const wasPublished = post.status === PostStatus.PUBLISHED;
+    const [media, meta] = await Promise.all([
+      this.prisma.postMedia.findMany({
+        where: { postId, storagePath: { not: null } },
+        select: { storagePath: true },
+      }),
+      this.prisma.post.findUnique({
+        where: { id: postId },
+        select: {
+          slug: true,
+          author: { select: { username: true } },
+          category: { select: { slug: true } },
+        },
+      }),
+    ]);
     await this.prisma.post.delete({ where: { id: postId } });
 
     // Limpa arquivos órfãos do Storage (best-effort)
@@ -323,6 +431,13 @@ export class PostsService {
       .map((p) => p.slice(BUCKET_POST_MEDIA.length + 1));
     void this.storage.removeFiles(BUCKET_POST_MEDIA, paths);
     void this.storage.removeFileByPublicUrl(post.coverImageUrl);
+
+    // Post publicado foi removido → invalida o cache público.
+    if (wasPublished && meta) {
+      this.revalidate.trigger(
+        this.buildPostPaths(meta.slug, meta.author.username, meta.category?.slug),
+      );
+    }
   }
 
   /**

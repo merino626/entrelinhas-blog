@@ -20,6 +20,6 @@ export class PostsQueryDto extends PageQueryDto {
   author?: string;
 
   @IsOptional()
-  @IsIn(['recent', 'popular'])
-  sort?: 'recent' | 'popular';
+  @IsIn(['recent', 'popular', 'trending'])
+  sort?: 'recent' | 'popular' | 'trending';
 }

@@ -114,6 +114,9 @@ model Post {
   createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  /// Coluna gerada (tsvector) para busca full-text — ver migration post_search_vector.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
   author   Profile    @relation(fields: [authorId], references: [id], onDelete: Cascade)
   category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   media    PostMedia[]
