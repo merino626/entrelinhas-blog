@@ -7,6 +7,7 @@ import { FeedSection } from '@/components/feed-section';
 
 export const metadata: Metadata = {
   title: 'Entrelinhas — um blog feito com carinho',
+  alternates: { canonical: '/' },
 };
 
 export const revalidate = 60;

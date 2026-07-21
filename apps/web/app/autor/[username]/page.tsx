@@ -16,7 +16,21 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username } = await params;
   const profile = await apiGet<PublicProfile>(`/users/${username}`);
-  return { title: profile ? `${profile.displayName} (@${profile.username})` : 'Autor' };
+  if (!profile) return { title: 'Autor' };
+  const description =
+    profile.bio ?? `Publicações de ${profile.displayName} (@${profile.username}) no Entrelinhas.`;
+  return {
+    title: `${profile.displayName} (@${profile.username})`,
+    description,
+    alternates: { canonical: `/autor/${username}` },
+    openGraph: {
+      type: 'profile',
+      title: profile.displayName,
+      description,
+      url: `/autor/${username}`,
+      images: profile.avatarUrl ? [{ url: profile.avatarUrl }] : undefined,
+    },
+  };
 }
 
 export default async function AuthorPage({ params }: Props) {

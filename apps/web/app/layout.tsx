@@ -13,14 +13,27 @@ const fraunces = Fraunces({
 });
 
 const SITE_NAME = 'Entrelinhas';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: `${SITE_NAME} — um blog feito com carinho`,
     template: `%s · ${SITE_NAME}`,
   },
   description:
     'Artigos sobre tecnologia, tutoriais e carreira — escritos com atenção aos detalhes.',
+  openGraph: {
+    siteName: SITE_NAME,
+    locale: 'pt_BR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
+  alternates: {
+    types: { 'application/rss+xml': '/feed.xml' },
+  },
 };
 
 // Aplica o tema salvo ANTES da hidratação (evita flash de tema errado)

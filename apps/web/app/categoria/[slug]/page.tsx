@@ -15,7 +15,19 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const category = await apiGet<CategorySummary>(`/categories/${slug}`, 300);
-  return { title: category ? `Categoria: ${category.name}` : 'Categoria' };
+  if (!category) return { title: 'Categoria' };
+  const description =
+    category.description ?? `Posts na categoria ${category.name} no Entrelinhas.`;
+  return {
+    title: `Categoria: ${category.name}`,
+    description,
+    alternates: { canonical: `/categoria/${slug}` },
+    openGraph: {
+      title: `Categoria: ${category.name}`,
+      description,
+      url: `/categoria/${slug}`,
+    },
+  };
 }
 
 export default async function CategoryPage({ params }: Props) {

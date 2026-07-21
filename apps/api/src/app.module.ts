@@ -12,6 +12,7 @@ import { MediaModule } from './media/media.module';
 import { CommentsModule } from './comments/comments.module';
 import { FollowsModule } from './follows/follows.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { HealthModule } from './health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -30,6 +31,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CommentsModule,
     FollowsModule,
     NotificationsModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
