@@ -22,9 +22,12 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [content, setContent] = useState<EditorPayload | null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [autosaving, setAutosaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const coverRef = useRef<HTMLInputElement>(null);
+  // Pula o autosave na hidratação inicial (setStates do carregamento).
+  const skipAutosave = useRef(true);
 
   useEffect(() => {
     void api.get<CategorySummary[]>('/categories').then(setCategories).catch(() => undefined);
@@ -78,6 +81,42 @@ export function PostEditor({ postId }: { postId?: string }) {
     }
   };
 
+  /**
+   * Autosave silencioso, só para rascunhos: um PATCH em post publicado iria
+   * ao ar na hora, então isso continua exigindo o botão "Publicar/Salvar".
+   */
+  const autosave = async () => {
+    if (saving || autosaving) return;
+    if (post && post.status !== 'DRAFT') return;
+    if (title.trim().length < LIMITS.postTitle.min) return;
+    setAutosaving(true);
+    try {
+      const saved = post
+        ? await api.patch<PostEditable>(`/posts/${post.id}`, payload())
+        : await api.post<PostEditable>('/posts', payload());
+      const isNew = !post;
+      setPost(saved);
+      setSavedAt(new Date());
+      if (isNew) window.history.replaceState(null, '', `/admin/posts/${saved.id}`);
+    } catch {
+      // Silencioso: um salvar manual reporta o erro se persistir.
+    } finally {
+      setAutosaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (skipAutosave.current) {
+      skipAutosave.current = false;
+      return;
+    }
+    if (post && post.status !== 'DRAFT') return;
+    if (title.trim().length < LIMITS.postTitle.min) return;
+    const timer = setTimeout(() => void autosave(), 3000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, excerpt, categoryId, coverImageUrl, content]);
+
   const publish = async () => {
     const saved = await save();
     if (!saved) return;
@@ -129,10 +168,23 @@ export function PostEditor({ postId }: { postId?: string }) {
           )}
         </h1>
         <div className="flex items-center gap-2">
-          {savedAt && (
-            <span className="text-xs text-stone-400">
-              salvo às {savedAt.toLocaleTimeString('pt-BR')}
-            </span>
+          {autosaving ? (
+            <span className="text-xs text-stone-400">salvando…</span>
+          ) : (
+            savedAt && (
+              <span className="text-xs text-stone-400">
+                salvo às {savedAt.toLocaleTimeString('pt-BR')}
+              </span>
+            )
+          )}
+          {post && (
+            <Button
+              variant="ghost"
+              onClick={() => window.open(`/admin/preview/${post.id}`, '_blank')}
+              disabled={saving}
+            >
+              Visualizar
+            </Button>
           )}
           <Button variant="secondary" onClick={() => void save()} disabled={saving}>
             {saving ? <Spinner /> : 'Salvar rascunho'}

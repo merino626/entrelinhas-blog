@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useRef, useState } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -9,6 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Youtube from '@tiptap/extension-youtube';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
+import { LIMITS } from '@blog/shared';
 import { api } from '@/lib/api';
 import { Spinner } from './ui';
 
@@ -50,17 +51,23 @@ function ToolbarButton({
   );
 }
 
-function Toolbar({ editor, uploading }: { editor: Editor; uploading: boolean }) {
+function Toolbar({
+  editor,
+  uploading,
+  onUpload,
+}: {
+  editor: Editor;
+  uploading: boolean;
+  onUpload: (file: File) => void;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const addImage = () => fileRef.current?.click();
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
-    const { url } = await api.upload<{ url: string }>('/media/upload', file);
-    editor.chain().focus().setImage({ src: url }).run();
+    if (file) onUpload(file);
   };
 
   const addLink = () => {
@@ -130,7 +137,7 @@ function Toolbar({ editor, uploading }: { editor: Editor; uploading: boolean }) 
       <ToolbarButton title="Refazer" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}>
         ↪
       </ToolbarButton>
-      <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void onFile(e)} />
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
     </div>
   );
 }
@@ -142,7 +149,30 @@ export function TiptapEditor({
   initialContent?: Record<string, unknown> | null;
   onChange: (payload: EditorPayload) => void;
 }) {
+  const [uploading, setUploading] = useState(false);
   const uploadingRef = useRef(false);
+  // Instância atual do editor, para uso dentro de handleDrop/handlePaste.
+  const editorRef = useRef<Editor | null>(null);
+
+  // Envia o arquivo e insere a imagem na posição indicada (ou na seleção).
+  const uploadAndInsert = async (editor: Editor, file: File, pos?: number) => {
+    if (!file.type.startsWith('image/') || file.size > LIMITS.uploadImageMaxBytes) return;
+    if (uploadingRef.current) return;
+    uploadingRef.current = true;
+    setUploading(true);
+    try {
+      const { url } = await api.upload<{ url: string }>('/media/upload', file);
+      const chain = editor.chain().focus();
+      if (pos !== undefined) chain.insertContentAt(pos, { type: 'image', attrs: { src: url } });
+      else chain.setImage({ src: url });
+      chain.run();
+    } catch {
+      // silencioso: o botão da toolbar continua disponível para nova tentativa
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
+    }
+  };
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -163,15 +193,31 @@ export function TiptapEditor({
       attributes: {
         class: 'tiptap post-prose px-5 py-4',
       },
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false;
+        const file = event.dataTransfer?.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return false;
+        event.preventDefault();
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        void uploadAndInsert(editorRef.current!, file, coords?.pos);
+        return true;
+      },
+      handlePaste: (_view, event) => {
+        const file = Array.from(event.clipboardData?.items ?? [])
+          .find((i) => i.type.startsWith('image/'))
+          ?.getAsFile();
+        if (!file) return false;
+        event.preventDefault();
+        void uploadAndInsert(editorRef.current!, file);
+        return true;
+      },
     },
     onUpdate: ({ editor: e }) => {
       onChange({ json: e.getJSON() as Record<string, unknown>, html: e.getHTML() });
     },
   });
 
-  const handlePasteImage = useCallback(() => {
-    // Upload por colagem fica para versão futura; colar URL de imagem funciona
-  }, []);
+  editorRef.current = editor;
 
   if (!editor) {
     return (
@@ -182,11 +228,8 @@ export function TiptapEditor({
   }
 
   return (
-    <div
-      className="rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900"
-      onPaste={handlePasteImage}
-    >
-      <Toolbar editor={editor} uploading={uploadingRef.current} />
+    <div className="rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900">
+      <Toolbar editor={editor} uploading={uploading} onUpload={(file) => void uploadAndInsert(editor, file)} />
       <EditorContent editor={editor} />
     </div>
   );
