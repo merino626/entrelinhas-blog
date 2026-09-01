@@ -14,5 +14,11 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r --if-present run test",
     "lint": "pnpm -r run lint"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.26",
+      "nanoid": "^3.3.18"
+    }
   }
 }
