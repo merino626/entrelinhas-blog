@@ -125,3 +125,7 @@ Paid products/courses, direct video upload, Turnstile/captcha on registration, d
 
 - Web: https://entrelinhas-blog-web.vercel.app
 - API: https://entrelinhas-blog-2wd3.onrender.com/api/v1 (Swagger docs at `/api/docs`)
+
+## License
+
+[MIT](LICENSE)
