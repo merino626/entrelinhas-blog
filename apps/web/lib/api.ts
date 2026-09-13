@@ -140,5 +140,9 @@ export const api = {
     logout: () =>
       request<void>('/auth/logout', { method: 'POST', credentials: true, skipRefresh: true }),
     logoutAll: () => request<void>('/auth/logout-all', { method: 'POST', credentials: true }),
+    forgotPassword: (body: { email: string }) =>
+      request<void>('/auth/forgot-password', { method: 'POST', body, skipRefresh: true }),
+    resetPassword: (body: { token: string; password: string }) =>
+      request<void>('/auth/reset-password', { method: 'POST', body, skipRefresh: true }),
   },
 };

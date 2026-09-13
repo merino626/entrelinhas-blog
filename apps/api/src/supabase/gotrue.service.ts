@@ -122,4 +122,30 @@ export class GoTrueService {
       // Logout é best-effort: token pode já estar expirado/revogado
     }
   }
+
+  /**
+   * Dispara o e-mail de recuperação de senha do GoTrue. `redirectTo` é a
+   * página do frontend que recebe o link (access_token vem no #fragment,
+   * já que não pedimos PKCE aqui — nunca chega ao servidor).
+   */
+  recover(email: string, redirectTo: string): Promise<void> {
+    const query = `?redirect_to=${encodeURIComponent(redirectTo)}`;
+    return this.request<void>(`/recover${query}`, {
+      method: 'POST',
+      body: { email },
+    });
+  }
+
+  /**
+   * Troca a senha usando o access_token de recuperação (emitido só pelo
+   * link de e-mail, tipo "recovery"). O próprio GoTrue valida esse token —
+   * a API nunca o trata como uma sessão normal da aplicação.
+   */
+  updatePassword(recoveryToken: string, password: string): Promise<{ id: string; email: string }> {
+    return this.request<{ id: string; email: string }>('/user', {
+      method: 'PUT',
+      accessToken: recoveryToken,
+      body: { password },
+    });
+  }
 }

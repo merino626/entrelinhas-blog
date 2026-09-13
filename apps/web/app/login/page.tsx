@@ -50,9 +50,17 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium">
-              Senha
-            </label>
+            <div className="mb-1 flex items-center justify-between">
+              <label htmlFor="password" className="block text-sm font-medium">
+                Senha
+              </label>
+              <Link
+                href="/recuperar-senha"
+                className="text-xs font-medium text-accent hover:underline dark:text-accent-dark"
+              >
+                Esqueci minha senha
+              </Link>
+            </div>
             <Input
               id="password"
               type="password"

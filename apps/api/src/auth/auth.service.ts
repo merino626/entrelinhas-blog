@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Profile } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoTrueService, GoTrueSession } from '../supabase/gotrue.service';
@@ -32,7 +33,14 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gotrue: GoTrueService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** Primeira origem de WEB_ORIGIN — é para onde o link de recuperação aponta. */
+  private get webOrigin(): string {
+    const raw = this.config.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000';
+    return raw.split(',')[0].trim();
+  }
 
   private async assertUsernameAvailable(username: string): Promise<void> {
     if (RESERVED_USERNAMES.has(username)) {
@@ -169,5 +177,21 @@ export class AuthService {
 
   passwordPolicy() {
     return LIMITS.password;
+  }
+
+  /**
+   * Nunca revela se o e-mail existe (evita enumeração de contas): qualquer
+   * falha do GoTrue aqui é engolida, a resposta é sempre "genérica".
+   */
+  async forgotPassword(email: string): Promise<void> {
+    try {
+      await this.gotrue.recover(email, `${this.webOrigin}/redefinir-senha`);
+    } catch {
+      // silencioso de propósito
+    }
+  }
+
+  async resetPassword(recoveryToken: string, password: string): Promise<void> {
+    await this.gotrue.updatePassword(recoveryToken, password);
   }
 }
