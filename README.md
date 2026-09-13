@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/social-preview.png" alt="Entrelinhas" width="100%" />
+
 # Entrelinhas
 
 **A blog platform with a CMS, community features, and RBAC/security built in from day one — not bolted on after a tutorial.**

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/social-preview.png" alt="Entrelinhas" width="100%" />
+
 # Entrelinhas
 
 **Uma plataforma de blog com CMS, recursos de comunidade e RBAC/segurança pensados desde o primeiro dia — não encaixados depois de um tutorial.**
